@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://docs.opencv.org; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src data: blob:; frame-src 'none'; object-src 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src https://huggingface.co https://*.huggingface.co https://*.hf.co https://cdn.jsdelivr.net data: blob:; frame-src 'none'; object-src 'none'; worker-src blob:;">
 <title>Watermark Remover</title>
 <style>
   :root {
@@ -14,7 +14,6 @@
     --muted: #8e8e93;
     --accent: #6366f1;
     --accent-hover: #818cf8;
-    --danger: #ef4444;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -26,7 +25,6 @@
     flex-direction: column;
     align-items: center;
   }
-
   header {
     width: 100%;
     padding: 1rem 2rem;
@@ -39,154 +37,90 @@
   header h1 { font-size: 1.2rem; font-weight: 600; }
   header .status { font-size: 0.85rem; color: var(--muted); }
   .status .dot {
-    display: inline-block;
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    margin-right: 6px;
-    background: var(--muted);
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; margin-right: 6px; background: var(--muted);
   }
   .status .dot.ready { background: #22c55e; }
   .status .dot.loading { background: #eab308; animation: pulse 1s infinite; }
+  .status .dot.error { background: #ef4444; }
   @keyframes pulse { 50% { opacity: 0.4; } }
 
   .container {
-    width: 100%;
-    max-width: 1200px;
-    padding: 1.5rem;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    width: 100%; max-width: 1200px; padding: 1.5rem;
+    flex: 1; display: flex; flex-direction: column; gap: 1rem;
   }
-
-  /* Upload */
   .upload-zone {
-    border: 2px dashed var(--border);
-    border-radius: 16px;
-    padding: 4rem 2rem;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
+    border: 2px dashed var(--border); border-radius: 16px;
+    padding: 4rem 2rem; text-align: center; cursor: pointer; transition: all 0.2s;
   }
   .upload-zone:hover, .upload-zone.drag-over {
-    border-color: var(--accent);
-    background: rgba(99,102,241,0.05);
+    border-color: var(--accent); background: rgba(99,102,241,0.05);
   }
   .upload-zone h2 { font-size: 1.3rem; margin-bottom: 0.5rem; }
   .upload-zone p { color: var(--muted); font-size: 0.9rem; }
   .upload-zone input { display: none; }
 
-  /* Toolbar */
   .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
-    background: var(--surface);
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    flex-wrap: wrap;
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.75rem 1rem; background: var(--surface);
+    border-radius: 12px; border: 1px solid var(--border); flex-wrap: wrap;
   }
   .toolbar label {
-    font-size: 0.85rem;
-    color: var(--muted);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    font-size: 0.85rem; color: var(--muted);
+    display: flex; align-items: center; gap: 0.5rem;
   }
-  .toolbar input[type="range"] {
-    width: 120px;
-    accent-color: var(--accent);
-  }
+  .toolbar input[type="range"] { width: 120px; accent-color: var(--accent); }
   .toolbar .brush-preview {
-    width: 32px; height: 32px;
-    border-radius: 50%;
+    width: 32px; height: 32px; border-radius: 50%;
     border: 2px solid var(--accent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
   }
-  .toolbar .brush-preview .dot {
-    border-radius: 50%;
-    background: rgba(239, 68, 68, 0.6);
-  }
+  .toolbar .brush-preview .dot { border-radius: 50%; background: rgba(239, 68, 68, 0.6); }
 
   .btn {
-    padding: 0.5rem 1.2rem;
-    border: none;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
+    padding: 0.5rem 1.2rem; border: none; border-radius: 8px;
+    font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
   }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-primary {
-    background: var(--accent);
-    color: #fff;
-  }
+  .btn-primary { background: var(--accent); color: #fff; }
   .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
-  .btn-outline {
-    background: transparent;
-    color: var(--text);
-    border: 1px solid var(--border);
-  }
+  .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
   .btn-outline:hover:not(:disabled) { background: rgba(255,255,255,0.05); }
-  .btn-danger {
-    background: var(--danger);
-    color: #fff;
-  }
-  .btn-danger:hover:not(:disabled) { background: #dc2626; }
-
   .spacer { flex: 1; }
 
-  /* Canvas area */
   .canvas-wrap {
-    position: relative;
-    background: var(--surface);
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    min-height: 400px;
+    position: relative; background: var(--surface); border-radius: 12px;
+    border: 1px solid var(--border); overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    flex: 1; min-height: 400px;
   }
-  .canvas-wrap canvas {
-    max-width: 100%;
-    max-height: 70vh;
-  }
+  .canvas-wrap canvas { max-width: 100%; max-height: 70vh; }
   #maskCanvas {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    cursor: crosshair;
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); cursor: crosshair;
   }
-
-  /* Processing overlay */
   .processing {
-    position: absolute;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1rem;
-    z-index: 10;
+    position: absolute; inset: 0; background: rgba(0,0,0,0.7);
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 1rem; z-index: 10;
   }
   .processing .spinner {
-    width: 40px; height: 40px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
+    width: 40px; height: 40px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  .progress-bar {
+    width: 260px; height: 6px; background: rgba(255,255,255,0.1);
+    border-radius: 3px; overflow: hidden;
+  }
+  .progress-bar .fill {
+    height: 100%; background: var(--accent); border-radius: 3px;
+    transition: width 0.3s;
+  }
   .hidden { display: none !important; }
 
-  /* Responsive */
   @media (max-width: 768px) {
     .toolbar { gap: 0.5rem; }
     .toolbar input[type="range"] { width: 80px; }
@@ -197,32 +131,25 @@
 <body>
 
 <header>
-  <h1>Watermark Remover</h1>
+  <h1>Watermark Remover <span style="font-size:0.7rem;color:var(--muted);font-weight:400;">AI</span></h1>
   <div class="status">
-    <span class="dot loading" id="cvStatus"></span>
-    <span id="cvStatusText">Loading OpenCV...</span>
+    <span class="dot" id="modelStatus"></span>
+    <span id="modelStatusText">Model not loaded</span>
   </div>
 </header>
 
 <div class="container">
-  <!-- Upload -->
   <div class="upload-zone" id="uploadZone">
     <h2>Upload Image</h2>
     <p>Drop image here or click to select</p>
     <input type="file" id="fileInput" accept="image/*">
   </div>
 
-  <!-- Toolbar -->
   <div class="toolbar hidden" id="toolbar">
     <label>
       Brush
-      <input type="range" id="brushSize" min="3" max="80" value="20">
+      <input type="range" id="brushSize" min="3" max="80" value="25">
       <div class="brush-preview"><div class="dot" id="brushDot"></div></div>
-    </label>
-    <label>
-      Radius
-      <input type="range" id="inpaintRadius" min="3" max="30" value="10">
-      <span id="radiusVal">10</span>
     </label>
     <div class="spacer"></div>
     <button class="btn btn-outline" id="undoBtn" disabled>Undo</button>
@@ -232,106 +159,146 @@
     <button class="btn btn-outline" id="newBtn">New Image</button>
   </div>
 
-  <!-- Canvas -->
   <div class="canvas-wrap hidden" id="canvasWrap">
     <canvas id="imgCanvas"></canvas>
     <canvas id="maskCanvas"></canvas>
     <div class="processing hidden" id="processing">
       <div class="spinner"></div>
-      <span>Processing...</span>
+      <span id="procText">Processing...</span>
+      <div class="progress-bar hidden" id="progressBar"><div class="fill" id="progressFill"></div></div>
     </div>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
 <script>
+// ============================================================
+//  CONFIG
+// ============================================================
+const MODEL_URL = 'https://huggingface.co/Carve/LaMa-ONNX/resolve/main/lama_fp32.onnx';
+const LAMA_SIZE = 512;
+const MAX_PIXELS = 25000000;
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
+
 // ============================================================
 //  STATE
 // ============================================================
-let cvReady = false;
-let originalImage = null;   // HTMLImageElement
-let imgW = 0, imgH = 0;    // display size on canvas
-let realW = 0, realH = 0;  // actual image pixel size
+let session = null;
+let originalImage = null;
+let imgW = 0, imgH = 0;
+let realW = 0, realH = 0;
 let painting = false;
-let maskHistory = [];       // for undo
+let maskHistory = [];
+let lastPos = null;
 
 const imgCanvas  = document.getElementById('imgCanvas');
 const maskCanvas = document.getElementById('maskCanvas');
 const imgCtx  = imgCanvas.getContext('2d');
 const maskCtx = maskCanvas.getContext('2d');
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+const brushSizeEl = document.getElementById('brushSize');
+const brushDot    = document.getElementById('brushDot');
 
 // ============================================================
-//  LOAD OPENCV.JS
+//  LOAD MODEL (on demand)
 // ============================================================
-const script = document.createElement('script');
-script.src = 'https://docs.opencv.org/4.9.0/opencv.js';
-script.async = true;
-script.onload = () => {
-  function waitForCv() {
-    if (typeof cv !== 'undefined' && cv.Mat) {
-      onCvReady();
-    } else {
-      setTimeout(waitForCv, 100);
+async function loadModel() {
+  if (session) return;
+
+  const statusDot  = document.getElementById('modelStatus');
+  const statusText = document.getElementById('modelStatusText');
+  const proc = document.getElementById('processing');
+  const procText = document.getElementById('procText');
+  const progressBar = document.getElementById('progressBar');
+  const progressFill = document.getElementById('progressFill');
+
+  statusDot.className = 'dot loading';
+  statusText.textContent = 'Downloading model (208 MB)...';
+  proc.classList.remove('hidden');
+  procText.textContent = 'Downloading AI model (first time only)...';
+  progressBar.classList.remove('hidden');
+  progressFill.style.width = '0%';
+
+  try {
+    // Download with progress
+    const response = await fetch(MODEL_URL);
+    if (!response.ok) throw new Error('Download failed: ' + response.status);
+
+    const contentLength = parseInt(response.headers.get('content-length') || '0');
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      if (contentLength > 0) {
+        const pct = Math.round((received / contentLength) * 100);
+        progressFill.style.width = pct + '%';
+        statusText.textContent = 'Downloading model... ' + pct + '%';
+      }
     }
+
+    // Combine chunks
+    const modelBuffer = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      modelBuffer.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    // Create session
+    procText.textContent = 'Loading AI model...';
+    progressBar.classList.add('hidden');
+
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
+    ort.env.wasm.numThreads = 1;
+
+    session = await ort.InferenceSession.create(modelBuffer.buffer, {
+      executionProviders: ['wasm'],
+      graphOptimizationLevel: 'all'
+    });
+
+    statusDot.className = 'dot ready';
+    statusText.textContent = 'AI Ready';
+  } catch (err) {
+    statusDot.className = 'dot error';
+    statusText.textContent = 'Failed to load model';
+    proc.classList.add('hidden');
+    throw err;
   }
-  waitForCv();
-};
-script.onerror = () => {
-  document.getElementById('cvStatus').className = 'dot';
-  document.getElementById('cvStatus').style.background = '#ef4444';
-  document.getElementById('cvStatusText').textContent = 'Failed to load OpenCV';
-};
-document.head.appendChild(script);
 
-function onCvReady() {
-  cvReady = true;
-  document.getElementById('cvStatus').className = 'dot ready';
-  document.getElementById('cvStatusText').textContent = 'Ready';
+  proc.classList.add('hidden');
 }
-
-const MAX_PIXELS = 25000000; // 25 megapixels
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
 // ============================================================
 //  FILE UPLOAD
 // ============================================================
-const uploadZone = document.getElementById('uploadZone');
-const fileInput  = document.getElementById('fileInput');
-
 uploadZone.addEventListener('click', () => fileInput.click());
-uploadZone.addEventListener('dragover', e => {
-  e.preventDefault();
-  uploadZone.classList.add('drag-over');
-});
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
 uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
 uploadZone.addEventListener('drop', e => {
-  e.preventDefault();
-  uploadZone.classList.remove('drag-over');
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
   if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
 });
-fileInput.addEventListener('change', () => {
-  if (fileInput.files.length) loadFile(fileInput.files[0]);
-});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) loadFile(fileInput.files[0]); });
 
 function loadFile(file) {
-  if (!file.type.startsWith('image/')) {
-    alert('Please select an image file.');
-    return;
-  }
-  if (file.size > MAX_FILE_SIZE) {
-    alert('Image too large (max 20 MB).');
-    return;
-  }
+  if (!file.type.startsWith('image/')) { alert('Please select an image file.'); return; }
+  if (file.size > MAX_FILE_SIZE) { alert('Image too large (max 20 MB).'); return; }
   const reader = new FileReader();
   reader.onload = e => {
     const img = new Image();
     img.onload = () => {
       if (img.naturalWidth * img.naturalHeight > MAX_PIXELS) {
-        alert('Image too large (' + img.naturalWidth + 'x' + img.naturalHeight + '). Max 25 megapixels.');
-        return;
+        alert('Image too large. Max 25 megapixels.'); return;
       }
       initEditor(img);
     };
-    img.onerror = () => alert('Failed to load image. File may be corrupted.');
+    img.onerror = () => alert('Failed to load image.');
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
@@ -345,14 +312,12 @@ function initEditor(img) {
   realW = img.naturalWidth;
   realH = img.naturalHeight;
 
-  // Show elements first so clientWidth is valid
   uploadZone.classList.add('hidden');
   document.getElementById('toolbar').classList.remove('hidden');
   document.getElementById('canvasWrap').classList.remove('hidden');
   document.getElementById('downloadBtn').classList.add('hidden');
   document.getElementById('undoBtn').disabled = true;
 
-  // Fit canvas to container
   const wrap = document.getElementById('canvasWrap');
   const maxW = Math.max(wrap.clientWidth - 4, 600);
   const maxH = window.innerHeight * 0.7;
@@ -360,14 +325,10 @@ function initEditor(img) {
   imgW = Math.round(realW * scale);
   imgH = Math.round(realH * scale);
 
-  imgCanvas.width = imgW;
-  imgCanvas.height = imgH;
-  imgCanvas.style.width = imgW + 'px';
-  imgCanvas.style.height = imgH + 'px';
-  maskCanvas.width = imgW;
-  maskCanvas.height = imgH;
-  maskCanvas.style.width = imgW + 'px';
-  maskCanvas.style.height = imgH + 'px';
+  imgCanvas.width = imgW;  imgCanvas.height = imgH;
+  imgCanvas.style.width = imgW + 'px'; imgCanvas.style.height = imgH + 'px';
+  maskCanvas.width = imgW; maskCanvas.height = imgH;
+  maskCanvas.style.width = imgW + 'px'; maskCanvas.style.height = imgH + 'px';
 
   imgCtx.drawImage(img, 0, 0, imgW, imgH);
   maskCtx.clearRect(0, 0, imgW, imgH);
@@ -375,38 +336,26 @@ function initEditor(img) {
 }
 
 // ============================================================
-//  BRUSH
+//  BRUSH & MASK DRAWING
 // ============================================================
-const brushSizeEl = document.getElementById('brushSize');
-const brushDot    = document.getElementById('brushDot');
-const radiusEl    = document.getElementById('inpaintRadius');
-const radiusVal   = document.getElementById('radiusVal');
-
 function updateBrushPreview() {
-  const s = Math.max(4, brushSizeEl.value * 0.6);
-  brushDot.style.width = s + 'px';
-  brushDot.style.height = s + 'px';
+  const s = Math.max(4, parseInt(brushSizeEl.value) * 0.6);
+  brushDot.style.width = s + 'px'; brushDot.style.height = s + 'px';
 }
 brushSizeEl.addEventListener('input', updateBrushPreview);
 updateBrushPreview();
 
-radiusEl.addEventListener('input', () => {
-  radiusVal.textContent = radiusEl.value;
-});
-
-// ============================================================
-//  MASK DRAWING
-// ============================================================
 function getPos(e) {
   const r = maskCanvas.getBoundingClientRect();
-  const x = (e.clientX ?? e.touches?.[0]?.clientX ?? 0) - r.left;
-  const y = (e.clientY ?? e.touches?.[0]?.clientY ?? 0) - r.top;
-  return { x, y };
+  if (e.touches && e.touches.length > 0) {
+    return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+  }
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
 function saveMaskState() {
   maskHistory.push(maskCtx.getImageData(0, 0, imgW, imgH));
-  if (maskHistory.length > 30) maskHistory.shift();
+  if (maskHistory.length > 20) maskHistory.shift();
   document.getElementById('undoBtn').disabled = false;
 }
 
@@ -418,22 +367,9 @@ function drawBrush(x, y) {
   maskCtx.fill();
 }
 
-let lastPos = null;
-
-maskCanvas.addEventListener('mousedown', e => {
-  painting = true;
-  saveMaskState();
-  const p = getPos(e);
-  lastPos = p;
-  drawBrush(p.x, p.y);
-});
-maskCanvas.addEventListener('mousemove', e => {
-  if (!painting) return;
-  const p = getPos(e);
-  // Interpolate for smooth strokes
+function handlePointerMove(pos) {
   if (lastPos) {
-    const dx = p.x - lastPos.x;
-    const dy = p.y - lastPos.y;
+    const dx = pos.x - lastPos.x, dy = pos.y - lastPos.y;
     const dist = Math.sqrt(dx*dx + dy*dy);
     const step = Math.max(1, parseInt(brushSizeEl.value) / 4);
     for (let i = 0; i < dist; i += step) {
@@ -441,61 +377,32 @@ maskCanvas.addEventListener('mousemove', e => {
       drawBrush(lastPos.x + dx * t, lastPos.y + dy * t);
     }
   }
-  drawBrush(p.x, p.y);
-  lastPos = p;
-});
+  drawBrush(pos.x, pos.y);
+  lastPos = pos;
+}
+
+// Mouse events
+maskCanvas.addEventListener('mousedown', e => { painting = true; saveMaskState(); lastPos = getPos(e); drawBrush(lastPos.x, lastPos.y); });
+maskCanvas.addEventListener('mousemove', e => { if (painting) handlePointerMove(getPos(e)); });
 maskCanvas.addEventListener('mouseup', () => { painting = false; lastPos = null; });
 maskCanvas.addEventListener('mouseleave', () => { painting = false; lastPos = null; });
 
-// Touch support
-maskCanvas.addEventListener('touchstart', e => {
-  e.preventDefault();
-  painting = true;
-  saveMaskState();
-  const p = getPos(e);
-  lastPos = p;
-  drawBrush(p.x, p.y);
-}, { passive: false });
-maskCanvas.addEventListener('touchmove', e => {
-  e.preventDefault();
-  if (!painting) return;
-  const p = getPos(e);
-  if (lastPos) {
-    const dx = p.x - lastPos.x;
-    const dy = p.y - lastPos.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    const step = Math.max(1, parseInt(brushSizeEl.value) / 4);
-    for (let i = 0; i < dist; i += step) {
-      const t = i / dist;
-      drawBrush(lastPos.x + dx * t, lastPos.y + dy * t);
-    }
-  }
-  drawBrush(p.x, p.y);
-  lastPos = p;
-}, { passive: false });
+// Touch events
+maskCanvas.addEventListener('touchstart', e => { e.preventDefault(); painting = true; saveMaskState(); lastPos = getPos(e); drawBrush(lastPos.x, lastPos.y); }, { passive: false });
+maskCanvas.addEventListener('touchmove', e => { e.preventDefault(); if (painting) handlePointerMove(getPos(e)); }, { passive: false });
 maskCanvas.addEventListener('touchend', () => { painting = false; lastPos = null; });
 
 // ============================================================
-//  UNDO / CLEAR
+//  UNDO / CLEAR / NEW
 // ============================================================
 document.getElementById('undoBtn').addEventListener('click', () => {
-  if (maskHistory.length > 0) {
-    maskCtx.putImageData(maskHistory.pop(), 0, 0);
-  }
-  if (maskHistory.length === 0) {
-    document.getElementById('undoBtn').disabled = true;
-  }
+  if (maskHistory.length > 0) maskCtx.putImageData(maskHistory.pop(), 0, 0);
+  if (maskHistory.length === 0) document.getElementById('undoBtn').disabled = true;
 });
-
 document.getElementById('clearBtn').addEventListener('click', () => {
-  maskCtx.clearRect(0, 0, imgW, imgH);
-  maskHistory = [];
+  maskCtx.clearRect(0, 0, imgW, imgH); maskHistory = [];
   document.getElementById('undoBtn').disabled = true;
 });
-
-// ============================================================
-//  NEW IMAGE
-// ============================================================
 document.getElementById('newBtn').addEventListener('click', () => {
   uploadZone.classList.remove('hidden');
   document.getElementById('toolbar').classList.add('hidden');
@@ -504,114 +411,171 @@ document.getElementById('newBtn').addEventListener('click', () => {
 });
 
 // ============================================================
-//  INPAINT
+//  LAMA INPAINT
 // ============================================================
-document.getElementById('removeBtn').addEventListener('click', async () => {
-  if (!cvReady) {
-    alert('OpenCV is still loading, please wait...');
-    return;
+function canvasToImageTensor(imgCanvas, maskCanvas) {
+  const imgData = imgCanvas.getContext('2d').getImageData(0, 0, LAMA_SIZE, LAMA_SIZE).data;
+  const maskData = maskCanvas.getContext('2d').getImageData(0, 0, LAMA_SIZE, LAMA_SIZE).data;
+  const float32 = new Float32Array(3 * LAMA_SIZE * LAMA_SIZE);
+  const pixelCount = LAMA_SIZE * LAMA_SIZE;
+  for (let i = 0, j = 0; i < imgData.length; i += 4, j++) {
+    // LaMa expects masked pixels zeroed out: image * (1 - mask)
+    const isMasked = maskData[i] > 128 ? 1 : 0;
+    const keep = 1 - isMasked;
+    float32[j]                = (imgData[i]     / 255.0) * keep;
+    float32[j + pixelCount]   = (imgData[i + 1] / 255.0) * keep;
+    float32[j + pixelCount*2] = (imgData[i + 2] / 255.0) * keep;
   }
+  return new ort.Tensor('float32', float32, [1, 3, LAMA_SIZE, LAMA_SIZE]);
+}
 
-  // Check if mask has any painted pixels
+function canvasToMaskTensor(canvas) {
+  const ctx = canvas.getContext('2d');
+  const data = ctx.getImageData(0, 0, LAMA_SIZE, LAMA_SIZE).data;
+  const float32 = new Float32Array(LAMA_SIZE * LAMA_SIZE);
+  for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+    float32[j] = data[i] > 128 ? 1.0 : 0.0;
+  }
+  return new ort.Tensor('float32', float32, [1, 1, LAMA_SIZE, LAMA_SIZE]);
+}
+
+function outputToCanvas(outputData) {
+  const canvas = document.createElement('canvas');
+  canvas.width = LAMA_SIZE; canvas.height = LAMA_SIZE;
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.createImageData(LAMA_SIZE, LAMA_SIZE);
+  const pixels = imageData.data;
+  const pixelCount = LAMA_SIZE * LAMA_SIZE;
+
+  // Detect output range: if max > 2 then values are already 0-255
+  let maxVal = 0;
+  for (let i = 0; i < Math.min(outputData.length, 10000); i++) {
+    if (outputData[i] > maxVal) maxVal = outputData[i];
+  }
+  const scale = maxVal > 2 ? 1 : 255;
+
+  for (let i = 0; i < pixelCount; i++) {
+    pixels[i*4]     = Math.min(255, Math.max(0, Math.round(outputData[i] * scale)));
+    pixels[i*4 + 1] = Math.min(255, Math.max(0, Math.round(outputData[i + pixelCount] * scale)));
+    pixels[i*4 + 2] = Math.min(255, Math.max(0, Math.round(outputData[i + pixelCount*2] * scale)));
+    pixels[i*4 + 3] = 255;
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+document.getElementById('removeBtn').addEventListener('click', async () => {
+  // Check mask
   const checkData = maskCtx.getImageData(0, 0, imgW, imgH);
   let hasMask = false;
   for (let i = 3; i < checkData.data.length; i += 4) {
     if (checkData.data[i] > 10) { hasMask = true; break; }
   }
-  if (!hasMask) {
-    alert('Please paint over the watermark area first.');
-    return;
-  }
+  if (!hasMask) { alert('Please paint over the watermark area first.'); return; }
 
   const proc = document.getElementById('processing');
-  proc.classList.remove('hidden');
+  const procText = document.getElementById('procText');
+  const progressBar = document.getElementById('progressBar');
 
-  // Use setTimeout to let UI update
-  await new Promise(r => setTimeout(r, 50));
-
-  const mats = [];
   try {
-    // Draw original at full resolution onto offscreen canvas
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = realW;
-    offCanvas.height = realH;
-    const offCtx = offCanvas.getContext('2d');
-    offCtx.drawImage(originalImage, 0, 0, realW, realH);
+    // Load model on first use
+    if (!session) {
+      await loadModel();
+    }
 
-    // Build binary mask at full resolution
-    const maskData = maskCtx.getImageData(0, 0, imgW, imgH);
-    const fullMaskCanvas = document.createElement('canvas');
-    fullMaskCanvas.width = realW;
-    fullMaskCanvas.height = realH;
-    const fullMaskCtx = fullMaskCanvas.getContext('2d');
+    proc.classList.remove('hidden');
+    progressBar.classList.add('hidden');
+    procText.textContent = 'Removing watermark...';
+    await new Promise(r => setTimeout(r, 50));
 
-    // Scale mask to full resolution
-    const tmpCanvas = document.createElement('canvas');
-    tmpCanvas.width = imgW;
-    tmpCanvas.height = imgH;
-    const tmpCtx = tmpCanvas.getContext('2d');
+    // 1. Prepare image at 512x512
+    const imgResized = document.createElement('canvas');
+    imgResized.width = LAMA_SIZE; imgResized.height = LAMA_SIZE;
+    imgResized.getContext('2d').drawImage(originalImage, 0, 0, LAMA_SIZE, LAMA_SIZE);
 
-    // Convert red-painted areas to white mask
-    for (let i = 0; i < maskData.data.length; i += 4) {
-      const a = maskData.data[i + 3];
-      if (a > 10) {
-        maskData.data[i] = 255;
-        maskData.data[i+1] = 255;
-        maskData.data[i+2] = 255;
-        maskData.data[i+3] = 255;
-      } else {
-        maskData.data[i] = 0;
-        maskData.data[i+1] = 0;
-        maskData.data[i+2] = 0;
-        maskData.data[i+3] = 255;
+    // 2. Prepare mask at 512x512
+    // First convert mask to binary white on black
+    const maskBinary = document.createElement('canvas');
+    maskBinary.width = imgW; maskBinary.height = imgH;
+    const mbCtx = maskBinary.getContext('2d');
+    const rawMask = maskCtx.getImageData(0, 0, imgW, imgH);
+    for (let i = 0; i < rawMask.data.length; i += 4) {
+      const painted = rawMask.data[i + 3] > 10;
+      rawMask.data[i] = rawMask.data[i+1] = rawMask.data[i+2] = painted ? 255 : 0;
+      rawMask.data[i+3] = 255;
+    }
+    mbCtx.putImageData(rawMask, 0, 0);
+
+    const maskResized = document.createElement('canvas');
+    maskResized.width = LAMA_SIZE; maskResized.height = LAMA_SIZE;
+    maskResized.getContext('2d').drawImage(maskBinary, 0, 0, LAMA_SIZE, LAMA_SIZE);
+
+    // 3. Create tensors
+    const imageTensor = canvasToImageTensor(imgResized, maskResized);
+    const maskTensor  = canvasToMaskTensor(maskResized);
+
+    // 4. Run inference — detect actual input names
+    const inputNames = session.inputNames;
+    const outputNames = session.outputNames;
+    console.log('Model inputs:', inputNames, 'outputs:', outputNames);
+
+    const feeds = {};
+    feeds[inputNames[0]] = imageTensor;
+    feeds[inputNames[1]] = maskTensor;
+
+    const results = await session.run(feeds);
+    const outputData = results[outputNames[0]].data;
+    console.log('Output range:', Math.min(...outputData.slice(0,1000)), 'to', Math.max(...outputData.slice(0,1000)));
+
+    // 5. Get LaMa result as 512x512 canvas
+    const lamaResult = outputToCanvas(outputData);
+
+    // 6. Composite: scale LaMa result to original size,
+    //    then blend only the masked area over the original
+    const resultCanvas = document.createElement('canvas');
+    resultCanvas.width = realW; resultCanvas.height = realH;
+    const rCtx = resultCanvas.getContext('2d');
+
+    // Draw original first
+    rCtx.drawImage(originalImage, 0, 0, realW, realH);
+
+    // Scale mask to full res for compositing
+    const fullMask = document.createElement('canvas');
+    fullMask.width = realW; fullMask.height = realH;
+    fullMask.getContext('2d').drawImage(maskBinary, 0, 0, realW, realH);
+
+    // Scale LaMa output to full res
+    const fullLama = document.createElement('canvas');
+    fullLama.width = realW; fullLama.height = realH;
+    fullLama.getContext('2d').drawImage(lamaResult, 0, 0, realW, realH);
+
+    // Composite: replace masked pixels with LaMa output
+    const origData = rCtx.getImageData(0, 0, realW, realH);
+    const lamaData = fullLama.getContext('2d').getImageData(0, 0, realW, realH);
+    const maskFull = fullMask.getContext('2d').getImageData(0, 0, realW, realH);
+
+    for (let i = 0; i < origData.data.length; i += 4) {
+      const maskVal = maskFull.data[i]; // 0 or 255
+      if (maskVal > 128) {
+        origData.data[i]     = lamaData.data[i];
+        origData.data[i + 1] = lamaData.data[i + 1];
+        origData.data[i + 2] = lamaData.data[i + 2];
       }
     }
-    tmpCtx.putImageData(maskData, 0, 0);
-    fullMaskCtx.drawImage(tmpCanvas, 0, 0, realW, realH);
+    rCtx.putImageData(origData, 0, 0);
 
-    // OpenCV inpaint
-    const srcRGBA = cv.imread(offCanvas); mats.push(srcRGBA);
-    const src = new cv.Mat(); mats.push(src);
-    cv.cvtColor(srcRGBA, src, cv.COLOR_RGBA2RGB);
-
-    const maskImg = cv.imread(fullMaskCanvas); mats.push(maskImg);
-    const maskGray = new cv.Mat(); mats.push(maskGray);
-    cv.cvtColor(maskImg, maskGray, cv.COLOR_RGBA2GRAY);
-
-    const maskBin = new cv.Mat(); mats.push(maskBin);
-    cv.threshold(maskGray, maskBin, 127, 255, cv.THRESH_BINARY);
-
-    const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5)); mats.push(kernel);
-    const maskDilated = new cv.Mat(); mats.push(maskDilated);
-    cv.dilate(maskBin, maskDilated, kernel, new cv.Point(-1, -1), 2);
-
-    const dst = new cv.Mat(); mats.push(dst);
-    const radius = parseInt(radiusEl.value);
-    cv.inpaint(src, maskDilated, dst, radius, cv.INPAINT_NS);
-
-    const dstRGBA = new cv.Mat(); mats.push(dstRGBA);
-    cv.cvtColor(dst, dstRGBA, cv.COLOR_RGB2RGBA);
-
-    // Show result
-    const resultCanvas = document.createElement('canvas');
-    resultCanvas.width = realW;
-    resultCanvas.height = realH;
-    cv.imshow(resultCanvas, dstRGBA);
-
-    // Update display
+    // 7. Update display
     imgCtx.drawImage(resultCanvas, 0, 0, imgW, imgH);
     maskCtx.clearRect(0, 0, imgW, imgH);
     maskHistory = [];
 
-    // Store result URL once
+    // Store result
     const resultURL = resultCanvas.toDataURL('image/png');
-
-    // Update originalImage to the result for further edits
     const resultImg = new Image();
     resultImg.onload = () => { originalImage = resultImg; };
     resultImg.src = resultURL;
 
-    // Show download button
+    // Download button
     const dlBtn = document.getElementById('downloadBtn');
     dlBtn.classList.remove('hidden');
     dlBtn.onclick = () => {
@@ -621,10 +585,9 @@ document.getElementById('removeBtn').addEventListener('click', async () => {
       a.click();
     };
   } catch (err) {
-    alert('Processing failed. Please try again.');
+    alert('Processing failed: ' + (err.message || err));
     console.error(err);
   } finally {
-    mats.forEach(m => { try { m.delete(); } catch(_){} });
     proc.classList.add('hidden');
   }
 });
