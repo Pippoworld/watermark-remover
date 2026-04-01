@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://docs.opencv.org; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src data: blob:; frame-src 'none'; object-src 'none';">
+<title>Watermark Remover</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: rgba(255,255,255,0.08);
+    --text: #e8eaed;
+    --muted: #8e8e93;
+    --accent: #6366f1;
+    --accent-hover: #818cf8;
+    --danger: #ef4444;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header {
+    width: 100%;
+    padding: 1rem 2rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 1.2rem; font-weight: 600; }
+  header .status { font-size: 0.85rem; color: var(--muted); }
+  .status .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: var(--muted);
+  }
+  .status .dot.ready { background: #22c55e; }
+  .status .dot.loading { background: #eab308; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+
+  .container {
+    width: 100%;
+    max-width: 1200px;
+    padding: 1.5rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  /* Upload */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 4rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(99,102,241,0.05);
+  }
+  .upload-zone h2 { font-size: 1.3rem; margin-bottom: 0.5rem; }
+  .upload-zone p { color: var(--muted); font-size: 0.9rem; }
+  .upload-zone input { display: none; }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--surface);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .toolbar label {
+    font-size: 0.85rem;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .toolbar input[type="range"] {
+    width: 120px;
+    accent-color: var(--accent);
+  }
+  .toolbar .brush-preview {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .toolbar .brush-preview .dot {
+    border-radius: 50%;
+    background: rgba(239, 68, 68, 0.6);
+  }
+
+  .btn {
+    padding: 0.5rem 1.2rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn-outline {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-outline:hover:not(:disabled) { background: rgba(255,255,255,0.05); }
+  .btn-danger {
+    background: var(--danger);
+    color: #fff;
+  }
+  .btn-danger:hover:not(:disabled) { background: #dc2626; }
+
+  .spacer { flex: 1; }
+
+  /* Canvas area */
+  .canvas-wrap {
+    position: relative;
+    background: var(--surface);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-height: 400px;
+  }
+  .canvas-wrap canvas {
+    max-width: 100%;
+    max-height: 70vh;
+  }
+  #maskCanvas {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    cursor: crosshair;
+  }
+
+  /* Processing overlay */
+  .processing {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    z-index: 10;
+  }
+  .processing .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .toolbar { gap: 0.5rem; }
+    .toolbar input[type="range"] { width: 80px; }
+    .container { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Watermark Remover</h1>
+  <div class="status">
+    <span class="dot loading" id="cvStatus"></span>
+    <span id="cvStatusText">Loading OpenCV...</span>
+  </div>
+</header>
+
+<div class="container">
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <h2>Upload Image</h2>
+    <p>Drop image here or click to select</p>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar hidden" id="toolbar">
+    <label>
+      Brush
+      <input type="range" id="brushSize" min="3" max="80" value="20">
+      <div class="brush-preview"><div class="dot" id="brushDot"></div></div>
+    </label>
+    <label>
+      Radius
+      <input type="range" id="inpaintRadius" min="3" max="30" value="10">
+      <span id="radiusVal">10</span>
+    </label>
+    <div class="spacer"></div>
+    <button class="btn btn-outline" id="undoBtn" disabled>Undo</button>
+    <button class="btn btn-outline" id="clearBtn">Clear Mask</button>
+    <button class="btn btn-primary" id="removeBtn">Remove Watermark</button>
+    <button class="btn btn-outline hidden" id="downloadBtn">Download</button>
+    <button class="btn btn-outline" id="newBtn">New Image</button>
+  </div>
+
+  <!-- Canvas -->
+  <div class="canvas-wrap hidden" id="canvasWrap">
+    <canvas id="imgCanvas"></canvas>
+    <canvas id="maskCanvas"></canvas>
+    <div class="processing hidden" id="processing">
+      <div class="spinner"></div>
+      <span>Processing...</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  STATE
+// ============================================================
+let cvReady = false;
+let originalImage = null;   // HTMLImageElement
+let imgW = 0, imgH = 0;    // display size on canvas
+let realW = 0, realH = 0;  // actual image pixel size
+let painting = false;
+let maskHistory = [];       // for undo
+
+const imgCanvas  = document.getElementById('imgCanvas');
+const maskCanvas = document.getElementById('maskCanvas');
+const imgCtx  = imgCanvas.getContext('2d');
+const maskCtx = maskCanvas.getContext('2d');
+
+// ============================================================
+//  LOAD OPENCV.JS
+// ============================================================
+const script = document.createElement('script');
+script.src = 'https://docs.opencv.org/4.9.0/opencv.js';
+script.async = true;
+script.onload = () => {
+  function waitForCv() {
+    if (typeof cv !== 'undefined' && cv.Mat) {
+      onCvReady();
+    } else {
+      setTimeout(waitForCv, 100);
+    }
+  }
+  waitForCv();
+};
+script.onerror = () => {
+  document.getElementById('cvStatus').className = 'dot';
+  document.getElementById('cvStatus').style.background = '#ef4444';
+  document.getElementById('cvStatusText').textContent = 'Failed to load OpenCV';
+};
+document.head.appendChild(script);
+
+function onCvReady() {
+  cvReady = true;
+  document.getElementById('cvStatus').className = 'dot ready';
+  document.getElementById('cvStatusText').textContent = 'Ready';
+}
+
+const MAX_PIXELS = 25000000; // 25 megapixels
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
+// ============================================================
+//  FILE UPLOAD
+// ============================================================
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  uploadZone.classList.add('drag-over');
+});
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) loadFile(fileInput.files[0]);
+});
+
+function loadFile(file) {
+  if (!file.type.startsWith('image/')) {
+    alert('Please select an image file.');
+    return;
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    alert('Image too large (max 20 MB).');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth * img.naturalHeight > MAX_PIXELS) {
+        alert('Image too large (' + img.naturalWidth + 'x' + img.naturalHeight + '). Max 25 megapixels.');
+        return;
+      }
+      initEditor(img);
+    };
+    img.onerror = () => alert('Failed to load image. File may be corrupted.');
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ============================================================
+//  EDITOR INIT
+// ============================================================
+function initEditor(img) {
+  originalImage = img;
+  realW = img.naturalWidth;
+  realH = img.naturalHeight;
+
+  // Show elements first so clientWidth is valid
+  uploadZone.classList.add('hidden');
+  document.getElementById('toolbar').classList.remove('hidden');
+  document.getElementById('canvasWrap').classList.remove('hidden');
+  document.getElementById('downloadBtn').classList.add('hidden');
+  document.getElementById('undoBtn').disabled = true;
+
+  // Fit canvas to container
+  const wrap = document.getElementById('canvasWrap');
+  const maxW = Math.max(wrap.clientWidth - 4, 600);
+  const maxH = window.innerHeight * 0.7;
+  const scale = Math.min(1, maxW / realW, maxH / realH);
+  imgW = Math.round(realW * scale);
+  imgH = Math.round(realH * scale);
+
+  imgCanvas.width = imgW;
+  imgCanvas.height = imgH;
+  imgCanvas.style.width = imgW + 'px';
+  imgCanvas.style.height = imgH + 'px';
+  maskCanvas.width = imgW;
+  maskCanvas.height = imgH;
+  maskCanvas.style.width = imgW + 'px';
+  maskCanvas.style.height = imgH + 'px';
+
+  imgCtx.drawImage(img, 0, 0, imgW, imgH);
+  maskCtx.clearRect(0, 0, imgW, imgH);
+  maskHistory = [];
+}
+
+// ============================================================
+//  BRUSH
+// ============================================================
+const brushSizeEl = document.getElementById('brushSize');
+const brushDot    = document.getElementById('brushDot');
+const radiusEl    = document.getElementById('inpaintRadius');
+const radiusVal   = document.getElementById('radiusVal');
+
+function updateBrushPreview() {
+  const s = Math.max(4, brushSizeEl.value * 0.6);
+  brushDot.style.width = s + 'px';
+  brushDot.style.height = s + 'px';
+}
+brushSizeEl.addEventListener('input', updateBrushPreview);
+updateBrushPreview();
+
+radiusEl.addEventListener('input', () => {
+  radiusVal.textContent = radiusEl.value;
+});
+
+// ============================================================
+//  MASK DRAWING
+// ============================================================
+function getPos(e) {
+  const r = maskCanvas.getBoundingClientRect();
+  const x = (e.clientX ?? e.touches?.[0]?.clientX ?? 0) - r.left;
+  const y = (e.clientY ?? e.touches?.[0]?.clientY ?? 0) - r.top;
+  return { x, y };
+}
+
+function saveMaskState() {
+  maskHistory.push(maskCtx.getImageData(0, 0, imgW, imgH));
+  if (maskHistory.length > 30) maskHistory.shift();
+  document.getElementById('undoBtn').disabled = false;
+}
+
+function drawBrush(x, y) {
+  const r = parseInt(brushSizeEl.value) / 2;
+  maskCtx.beginPath();
+  maskCtx.arc(x, y, r, 0, Math.PI * 2);
+  maskCtx.fillStyle = 'rgba(239, 68, 68, 0.5)';
+  maskCtx.fill();
+}
+
+let lastPos = null;
+
+maskCanvas.addEventListener('mousedown', e => {
+  painting = true;
+  saveMaskState();
+  const p = getPos(e);
+  lastPos = p;
+  drawBrush(p.x, p.y);
+});
+maskCanvas.addEventListener('mousemove', e => {
+  if (!painting) return;
+  const p = getPos(e);
+  // Interpolate for smooth strokes
+  if (lastPos) {
+    const dx = p.x - lastPos.x;
+    const dy = p.y - lastPos.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const step = Math.max(1, parseInt(brushSizeEl.value) / 4);
+    for (let i = 0; i < dist; i += step) {
+      const t = i / dist;
+      drawBrush(lastPos.x + dx * t, lastPos.y + dy * t);
+    }
+  }
+  drawBrush(p.x, p.y);
+  lastPos = p;
+});
+maskCanvas.addEventListener('mouseup', () => { painting = false; lastPos = null; });
+maskCanvas.addEventListener('mouseleave', () => { painting = false; lastPos = null; });
+
+// Touch support
+maskCanvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  painting = true;
+  saveMaskState();
+  const p = getPos(e);
+  lastPos = p;
+  drawBrush(p.x, p.y);
+}, { passive: false });
+maskCanvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!painting) return;
+  const p = getPos(e);
+  if (lastPos) {
+    const dx = p.x - lastPos.x;
+    const dy = p.y - lastPos.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const step = Math.max(1, parseInt(brushSizeEl.value) / 4);
+    for (let i = 0; i < dist; i += step) {
+      const t = i / dist;
+      drawBrush(lastPos.x + dx * t, lastPos.y + dy * t);
+    }
+  }
+  drawBrush(p.x, p.y);
+  lastPos = p;
+}, { passive: false });
+maskCanvas.addEventListener('touchend', () => { painting = false; lastPos = null; });
+
+// ============================================================
+//  UNDO / CLEAR
+// ============================================================
+document.getElementById('undoBtn').addEventListener('click', () => {
+  if (maskHistory.length > 0) {
+    maskCtx.putImageData(maskHistory.pop(), 0, 0);
+  }
+  if (maskHistory.length === 0) {
+    document.getElementById('undoBtn').disabled = true;
+  }
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  maskCtx.clearRect(0, 0, imgW, imgH);
+  maskHistory = [];
+  document.getElementById('undoBtn').disabled = true;
+});
+
+// ============================================================
+//  NEW IMAGE
+// ============================================================
+document.getElementById('newBtn').addEventListener('click', () => {
+  uploadZone.classList.remove('hidden');
+  document.getElementById('toolbar').classList.add('hidden');
+  document.getElementById('canvasWrap').classList.add('hidden');
+  fileInput.value = '';
+});
+
+// ============================================================
+//  INPAINT
+// ============================================================
+document.getElementById('removeBtn').addEventListener('click', async () => {
+  if (!cvReady) {
+    alert('OpenCV is still loading, please wait...');
+    return;
+  }
+
+  // Check if mask has any painted pixels
+  const checkData = maskCtx.getImageData(0, 0, imgW, imgH);
+  let hasMask = false;
+  for (let i = 3; i < checkData.data.length; i += 4) {
+    if (checkData.data[i] > 10) { hasMask = true; break; }
+  }
+  if (!hasMask) {
+    alert('Please paint over the watermark area first.');
+    return;
+  }
+
+  const proc = document.getElementById('processing');
+  proc.classList.remove('hidden');
+
+  // Use setTimeout to let UI update
+  await new Promise(r => setTimeout(r, 50));
+
+  const mats = [];
+  try {
+    // Draw original at full resolution onto offscreen canvas
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = realW;
+    offCanvas.height = realH;
+    const offCtx = offCanvas.getContext('2d');
+    offCtx.drawImage(originalImage, 0, 0, realW, realH);
+
+    // Build binary mask at full resolution
+    const maskData = maskCtx.getImageData(0, 0, imgW, imgH);
+    const fullMaskCanvas = document.createElement('canvas');
+    fullMaskCanvas.width = realW;
+    fullMaskCanvas.height = realH;
+    const fullMaskCtx = fullMaskCanvas.getContext('2d');
+
+    // Scale mask to full resolution
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width = imgW;
+    tmpCanvas.height = imgH;
+    const tmpCtx = tmpCanvas.getContext('2d');
+
+    // Convert red-painted areas to white mask
+    for (let i = 0; i < maskData.data.length; i += 4) {
+      const a = maskData.data[i + 3];
+      if (a > 10) {
+        maskData.data[i] = 255;
+        maskData.data[i+1] = 255;
+        maskData.data[i+2] = 255;
+        maskData.data[i+3] = 255;
+      } else {
+        maskData.data[i] = 0;
+        maskData.data[i+1] = 0;
+        maskData.data[i+2] = 0;
+        maskData.data[i+3] = 255;
+      }
+    }
+    tmpCtx.putImageData(maskData, 0, 0);
+    fullMaskCtx.drawImage(tmpCanvas, 0, 0, realW, realH);
+
+    // OpenCV inpaint
+    const srcRGBA = cv.imread(offCanvas); mats.push(srcRGBA);
+    const src = new cv.Mat(); mats.push(src);
+    cv.cvtColor(srcRGBA, src, cv.COLOR_RGBA2RGB);
+
+    const maskImg = cv.imread(fullMaskCanvas); mats.push(maskImg);
+    const maskGray = new cv.Mat(); mats.push(maskGray);
+    cv.cvtColor(maskImg, maskGray, cv.COLOR_RGBA2GRAY);
+
+    const maskBin = new cv.Mat(); mats.push(maskBin);
+    cv.threshold(maskGray, maskBin, 127, 255, cv.THRESH_BINARY);
+
+    const kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(5, 5)); mats.push(kernel);
+    const maskDilated = new cv.Mat(); mats.push(maskDilated);
+    cv.dilate(maskBin, maskDilated, kernel, new cv.Point(-1, -1), 2);
+
+    const dst = new cv.Mat(); mats.push(dst);
+    const radius = parseInt(radiusEl.value);
+    cv.inpaint(src, maskDilated, dst, radius, cv.INPAINT_NS);
+
+    const dstRGBA = new cv.Mat(); mats.push(dstRGBA);
+    cv.cvtColor(dst, dstRGBA, cv.COLOR_RGB2RGBA);
+
+    // Show result
+    const resultCanvas = document.createElement('canvas');
+    resultCanvas.width = realW;
+    resultCanvas.height = realH;
+    cv.imshow(resultCanvas, dstRGBA);
+
+    // Update display
+    imgCtx.drawImage(resultCanvas, 0, 0, imgW, imgH);
+    maskCtx.clearRect(0, 0, imgW, imgH);
+    maskHistory = [];
+
+    // Store result URL once
+    const resultURL = resultCanvas.toDataURL('image/png');
+
+    // Update originalImage to the result for further edits
+    const resultImg = new Image();
+    resultImg.onload = () => { originalImage = resultImg; };
+    resultImg.src = resultURL;
+
+    // Show download button
+    const dlBtn = document.getElementById('downloadBtn');
+    dlBtn.classList.remove('hidden');
+    dlBtn.onclick = () => {
+      const a = document.createElement('a');
+      a.href = resultURL;
+      a.download = 'watermark_removed.png';
+      a.click();
+    };
+  } catch (err) {
+    alert('Processing failed. Please try again.');
+    console.error(err);
+  } finally {
+    mats.forEach(m => { try { m.delete(); } catch(_){} });
+    proc.classList.add('hidden');
+  }
+});
+</script>
+</body>
+</html>
